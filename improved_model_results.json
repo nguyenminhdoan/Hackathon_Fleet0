@@ -12,11 +12,11 @@
   "prediction_horizon": 4,
   "n_features": 68,
   "best_threshold": 0.3,
-  "accuracy": 0.3056,
-  "precision": 0.285958904109589,
-  "recall": 0.907608695652174,
-  "f1_score": 0.4348958333333333,
-  "auc": 0.47182786157941436,
+  "accuracy": 0.2944,
+  "precision": 0.2944,
+  "recall": 1.0,
+  "f1_score": 0.45488257107540175,
+  "auc": 0.5007147786650893,
   "total_parameters": 587649,
-  "timestamp": "2025-10-21T23:17:10.017179"
+  "timestamp": "2025-10-22T16:13:19.494548"
 }
