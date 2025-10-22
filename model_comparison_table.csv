@@ -1,0 +1,4 @@
+Model,Accuracy,Precision,Recall,F1-Score,AUC-ROC,Parameters,Threshold
+LSTM (Improved),0.2944,0.2944,1.0000,0.4549,0.5007,"587,649",0.30
+GRU,0.3424,0.3005,0.9293,0.4542,0.5649,"444,929",0.35
+LSTM+Attention,0.3104,0.2992,1.0000,0.4606,0.5103,"395,905",0.40

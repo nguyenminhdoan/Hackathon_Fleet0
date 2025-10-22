@@ -381,6 +381,7 @@
             <button class="tab active" onclick="switchTab('dashboard')">🔴 LIVE: Real-Time Simulation</button>
             <button class="tab" onclick="switchTab('manual')">✍️ MANUAL: Test Prediction</button>
             <button class="tab" onclick="switchTab('analytics')">📈 Analytics</button>
+            <button class="tab" onclick="switchTab('comparison')">📊 Model Comparison</button>
             <button class="tab" onclick="switchTab('model')">🤖 Model Info</button>
         </div>
 
@@ -731,6 +732,99 @@
             </div>
         </div>
 
+        <!-- Tab: Model Comparison -->
+        <div id="comparison" class="tab-content">
+            <div class="card" style="margin-bottom: 20px;">
+                <h2>📊 Model Performance Comparison</h2>
+                <p style="color: #666; margin-bottom: 15px;">
+                    Comprehensive comparison of LSTM, GRU, and LSTM+Attention models trained on the EV maintenance dataset.
+                </p>
+                <div id="comparison-summary" style="background: #f9f9f9; padding: 15px; border-radius: 8px; margin: 15px 0;">
+                    <strong>Summary:</strong> <span id="comparison-summary-text">Loading comparison data...</span>
+                </div>
+            </div>
+
+            <div class="grid" style="grid-template-columns: 1fr;">
+                <!-- Metrics Comparison Chart -->
+                <div class="card">
+                    <h2>🎯 Key Metrics Comparison</h2>
+                    <img src="metrics_comparison.png" alt="Metrics Comparison" style="width: 100%; height: auto; border-radius: 8px;" onerror="this.src='data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'800\' height=\'400\'%3E%3Crect fill=\'%23f5f5f5\' width=\'800\' height=\'400\'/%3E%3Ctext x=\'50%25\' y=\'50%25\' text-anchor=\'middle\' fill=\'%23999\' font-size=\'20\'%3EChart not available - Run generate_model_comparison_report.py%3C/text%3E%3C/svg%3E';">
+                </div>
+
+                <!-- Radar Chart -->
+                <div class="card">
+                    <h2>🌐 Multi-Dimensional Performance</h2>
+                    <img src="radar_comparison.png" alt="Radar Comparison" style="width: 100%; height: auto; border-radius: 8px;" onerror="this.src='data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'800\' height=\'400\'%3E%3Crect fill=\'%23f5f5f5\' width=\'800\' height=\'400\'/%3E%3Ctext x=\'50%25\' y=\'50%25\' text-anchor=\'middle\' fill=\'%23999\' font-size=\'20\'%3EChart not available%3C/text%3E%3C/svg%3E';">
+                </div>
+
+                <!-- Performance Heatmap -->
+                <div class="card">
+                    <h2>🔥 Performance Heatmap</h2>
+                    <img src="performance_heatmap.png" alt="Performance Heatmap" style="width: 100%; height: auto; border-radius: 8px;" onerror="this.src='data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'800\' height=\'400\'%3E%3Crect fill=\'%23f5f5f5\' width=\'800\' height=\'400\'/%3E%3Ctext x=\'50%25\' y=\'50%25\' text-anchor=\'middle\' fill=\'%23999\' font-size=\'20\'%3EChart not available%3C/text%3E%3C/svg%3E';">
+                </div>
+
+                <!-- Confusion Matrices -->
+                <div class="card">
+                    <h2>🎲 Confusion Matrices Comparison</h2>
+                    <img src="confusion_matrices_comparison.png" alt="Confusion Matrices" style="width: 100%; height: auto; border-radius: 8px;" onerror="this.src='data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'800\' height=\'400\'%3E%3Crect fill=\'%23f5f5f5\' width=\'800\' height=\'400\'/%3E%3Ctext x=\'50%25\' y=\'50%25\' text-anchor=\'middle\' fill=\'%23999\' font-size=\'20\'%3EChart not available%3C/text%3E%3C/svg%3E';">
+                </div>
+
+                <!-- Complexity vs Performance -->
+                <div class="card">
+                    <h2>⚙️ Model Efficiency Analysis</h2>
+                    <img src="complexity_vs_performance.png" alt="Complexity vs Performance" style="width: 100%; height: auto; border-radius: 8px;" onerror="this.src='data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'800\' height=\'400\'%3E%3Crect fill=\'%23f5f5f5\' width=\'800\' height=\'400\'/%3E%3Ctext x=\'50%25\' y=\'50%25\' text-anchor=\'middle\' fill=\'%23999\' font-size=\'20\'%3EChart not available%3C/text%3E%3C/svg%3E';">
+                </div>
+
+                <!-- Detailed Comparison Table -->
+                <div class="card">
+                    <h2>📋 Detailed Metrics Table</h2>
+                    <div id="comparison-table-container">
+                        <table id="comparison-table">
+                            <thead>
+                                <tr>
+                                    <th>Model</th>
+                                    <th>Accuracy</th>
+                                    <th>Precision</th>
+                                    <th>Recall</th>
+                                    <th>F1-Score</th>
+                                    <th>AUC-ROC</th>
+                                    <th>Parameters</th>
+                                </tr>
+                            </thead>
+                            <tbody id="comparison-table-body">
+                                <tr>
+                                    <td colspan="7" style="text-align: center; color: #999;">
+                                        Loading data...
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Recommendations -->
+                <div class="card">
+                    <h2>💡 Model Selection Guide</h2>
+                    <div style="background: #e8f5e9; padding: 15px; border-radius: 8px; margin: 10px 0; border-left: 4px solid #4caf50;">
+                        <strong>🏆 For Maximum Safety (Catch All Failures):</strong>
+                        <p style="margin: 8px 0 0 0; color: #666;">Choose the model with highest <strong>Recall</strong> - ensures no maintenance events are missed.</p>
+                    </div>
+                    <div style="background: #fff3e0; padding: 15px; border-radius: 8px; margin: 10px 0; border-left: 4px solid #ff9800;">
+                        <strong>💰 For Cost Efficiency (Reduce False Alarms):</strong>
+                        <p style="margin: 8px 0 0 0; color: #666;">Choose the model with highest <strong>Precision</strong> - minimizes unnecessary maintenance.</p>
+                    </div>
+                    <div style="background: #e3f2fd; padding: 15px; border-radius: 8px; margin: 10px 0; border-left: 4px solid #2196f3;">
+                        <strong>⚖️ For Balanced Performance:</strong>
+                        <p style="margin: 8px 0 0 0; color: #666;">Choose the model with highest <strong>F1-Score</strong> - best overall balance.</p>
+                    </div>
+                    <div style="background: #f3e5f5; padding: 15px; border-radius: 8px; margin: 10px 0; border-left: 4px solid #9c27b0;">
+                        <strong>🎯 For Best Discrimination:</strong>
+                        <p style="margin: 8px 0 0 0; color: #666;">Choose the model with highest <strong>AUC-ROC</strong> - best at ranking risk levels.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- Tab: Model Info -->
         <div id="model" class="tab-content">
             <div class="grid">
@@ -836,6 +930,8 @@
                 updateAnalytics();
             } else if (tabName === 'model') {
                 updateModelInfo();
+            } else if (tabName === 'comparison') {
+                updateModelComparison();
             }
         }
 
@@ -1164,6 +1260,71 @@
             if (countdown < 0) {
                 countdown = refreshInterval;
                 updateDashboard();
+            }
+        }
+
+        // Update model comparison
+        async function updateModelComparison() {
+            try {
+                // Fetch comparison data from API
+                const res = await fetch(`${API_BASE}/api/model/comparison`);
+                const data = await res.json();
+
+                if (data.status === 'no_models') {
+                    document.getElementById('comparison-table-body').innerHTML = `
+                        <tr>
+                            <td colspan="7" style="text-align: center; color: #ff6b6b;">
+                                ⚠️ ${data.message}
+                            </td>
+                        </tr>
+                    `;
+                    document.getElementById('comparison-summary-text').textContent = data.message;
+                    return;
+                }
+
+                // Format models for display
+                const models = data.models.map(model => ({
+                    name: model.name,
+                    accuracy: (model.accuracy * 100).toFixed(2),
+                    precision: (model.precision * 100).toFixed(2),
+                    recall: (model.recall * 100).toFixed(2),
+                    f1: (model.f1_score * 100).toFixed(2),
+                    auc: model.auc_roc.toFixed(4),
+                    params: model.parameters.toLocaleString()
+                }));
+
+                // Update table
+                const tbody = document.getElementById('comparison-table-body');
+                tbody.innerHTML = models.map(model => `
+                    <tr>
+                        <td><strong>${model.name}</strong></td>
+                        <td>${model.accuracy}%</td>
+                        <td>${model.precision}%</td>
+                        <td>${model.recall}%</td>
+                        <td>${model.f1}%</td>
+                        <td>${model.auc}</td>
+                        <td>${model.params}</td>
+                    </tr>
+                `).join('');
+
+                // Update summary from API
+                const summaryLines = Object.values(data.summary);
+                const summaryText = summaryLines.map(line =>
+                    `<div style="margin: 8px 0;">${line}</div>`
+                ).join('');
+                document.getElementById('comparison-summary-text').innerHTML = summaryText;
+
+            } catch (error) {
+                console.error('Error loading comparison data:', error);
+                document.getElementById('comparison-table-body').innerHTML = `
+                    <tr>
+                        <td colspan="7" style="text-align: center; color: #ff6b6b;">
+                            ⚠️ Error: ${error.message}. Make sure the API server is running.
+                        </td>
+                    </tr>
+                `;
+                document.getElementById('comparison-summary-text').innerHTML =
+                    `<span style="color: #ff6b6b;">Error loading data: ${error.message}</span>`;
             }
         }
 

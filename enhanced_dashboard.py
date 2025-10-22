@@ -10,7 +10,7 @@ Features:
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Form
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 import pandas as pd
 import numpy as np
@@ -21,6 +21,7 @@ from datetime import datetime, timedelta
 import json
 from typing import List, Optional
 import uvicorn
+import os
 
 app = FastAPI(title="EV Fleet Predictive Maintenance Dashboard",
               description="Enhanced real-time monitoring with analytics",
@@ -568,6 +569,114 @@ async def advance_simulation():
     """Manually advance simulation to next timestep."""
     simulator.advance_time()
     return {"current_index": simulator.current_index, "timestamp": str(datetime.now())}
+
+
+@app.get("/api/model/comparison")
+async def get_model_comparison():
+    """Get model comparison data for all trained models."""
+    models = []
+
+    # Try to load LSTM (Improved) results
+    try:
+        with open('improved_model_results.json', 'r') as f:
+            lstm_data = json.load(f)
+            models.append({
+                'name': 'LSTM (Improved)',
+                'accuracy': lstm_data.get('accuracy', 0),
+                'precision': lstm_data.get('precision', 0),
+                'recall': lstm_data.get('recall', 0),
+                'f1_score': lstm_data.get('f1_score', 0),
+                'auc_roc': lstm_data.get('auc', 0),
+                'parameters': lstm_data.get('total_parameters', 0),
+                'threshold': lstm_data.get('best_threshold', 0.3)
+            })
+    except FileNotFoundError:
+        pass
+
+    # Try to load GRU results
+    try:
+        with open('gru_model_results.json', 'r') as f:
+            gru_data = json.load(f)
+            metrics = gru_data.get('metrics', gru_data)
+            params = gru_data.get('architecture', {}).get('total_parameters',
+                                                          gru_data.get('total_parameters', 0))
+            models.append({
+                'name': 'GRU',
+                'accuracy': metrics.get('accuracy', 0),
+                'precision': metrics.get('precision', 0),
+                'recall': metrics.get('recall', 0),
+                'f1_score': metrics.get('f1_score', 0),
+                'auc_roc': metrics.get('auc_roc', metrics.get('auc', 0)),
+                'parameters': params,
+                'threshold': gru_data.get('best_threshold', 0.35)
+            })
+    except FileNotFoundError:
+        pass
+
+    # Try to load Final LSTM+Attention results
+    try:
+        with open('final_model_results.json', 'r') as f:
+            final_data = json.load(f)
+            metrics = final_data.get('metrics', final_data)
+            models.append({
+                'name': 'LSTM+Attention',
+                'accuracy': metrics.get('accuracy', 0),
+                'precision': metrics.get('precision', 0),
+                'recall': metrics.get('recall', 0),
+                'f1_score': metrics.get('f1_score', 0),
+                'auc_roc': metrics.get('auc_roc', metrics.get('auc', 0)),
+                'parameters': final_data.get('total_parameters', 0),
+                'threshold': final_data.get('best_threshold', 0.4)
+            })
+    except FileNotFoundError:
+        pass
+
+    if not models:
+        return {
+            "status": "no_models",
+            "message": "No trained models found. Please train models first.",
+            "models": []
+        }
+
+    # Find best models
+    best = {
+        'recall': max(models, key=lambda x: x['recall']),
+        'precision': max(models, key=lambda x: x['precision']),
+        'f1_score': max(models, key=lambda x: x['f1_score']),
+        'auc_roc': max(models, key=lambda x: x['auc_roc'])
+    }
+
+    return {
+        "status": "success",
+        "timestamp": str(datetime.now()),
+        "models": models,
+        "best_models": {
+            'recall': best['recall']['name'],
+            'precision': best['precision']['name'],
+            'f1_score': best['f1_score']['name'],
+            'auc_roc': best['auc_roc']['name']
+        },
+        "summary": {
+            'recall': f"{best['recall']['name']} has the best Recall ({best['recall']['recall']*100:.2f}%) - catches the most failures.",
+            'precision': f"{best['precision']['name']} has the best Precision ({best['precision']['precision']*100:.2f}%) - fewest false alarms.",
+            'f1_score': f"{best['f1_score']['name']} has the best F1-Score ({best['f1_score']['f1_score']*100:.2f}%) - most balanced.",
+            'auc_roc': f"{best['auc_roc']['name']} has the best AUC-ROC ({best['auc_roc']['auc_roc']:.4f}) - best discrimination ability."
+        }
+    }
+
+
+# Serve PNG images for model comparison
+@app.get("/{filename}.png")
+async def serve_image(filename: str):
+    """Serve PNG image files."""
+    file_path = f"{filename}.png"
+    if os.path.exists(file_path):
+        return FileResponse(file_path, media_type="image/png")
+    else:
+        return JSONResponse(
+            status_code=404,
+            content={"error": f"Image {filename}.png not found. Please run generate_model_comparison_report.py"}
+        )
 
 
 # Continue in next message due to length...
