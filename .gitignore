@@ -1,0 +1,39 @@
+# Large dataset files (keep for training, but don't commit)
+EV_Predictive_Maintenance_Dataset_15min.csv
+EV_Predictive_Maintenance_Dataset_15min.xlsx
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.pyc
+
+# Virtual environments
+venv/
+ENV/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb
+
+# Logs
+*.log
+
+# Keep trained models (important for deployment)
+# These are small enough to commit
+# *.keras
+# *.pkl
+# *.json
