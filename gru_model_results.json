@@ -1,0 +1,13 @@
+{
+  "model_type": "stacked_gru",
+  "sequence_length": 24,
+  "prediction_horizon": 4,
+  "n_features": 58,
+  "accuracy": 0.6141123115913032,
+  "precision": 0.2978222483814008,
+  "recall": 0.22937443336355395,
+  "f1_score": 0.2591549295774648,
+  "auc": 0.5043740349724031,
+  "total_parameters": 111681,
+  "timestamp": "2025-10-21T11:57:31.998502"
+}

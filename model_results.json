@@ -1,0 +1,12 @@
+{
+  "model_type": "stacked_lstm",
+  "sequence_length": 24,
+  "prediction_horizon": 4,
+  "n_features": 58,
+  "accuracy": 0.7056155795651594,
+  "precision": 0.42857142857142855,
+  "recall": 0.0013599274705349048,
+  "f1_score": 0.0027112516945323093,
+  "auc": 0.49602804022568303,
+  "timestamp": "2025-10-21T11:55:33.277148"
+}
