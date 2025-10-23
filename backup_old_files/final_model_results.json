@@ -1,0 +1,37 @@
+{
+  "model_type": "final_lstm_with_attention",
+  "improvements": [
+    "Attention mechanism for temporal learning",
+    "Bidirectional LSTM layers",
+    "Balanced focal loss (gamma=2.0, alpha=0.75)",
+    "Advanced feature engineering",
+    "Optimized threshold selection",
+    "Enhanced regularization",
+    "Proper precision-recall balance"
+  ],
+  "architecture": {
+    "bidirectional_lstm": true,
+    "attention_mechanism": true,
+    "layers": "BiLSTM(128) -> BiLSTM(64) -> Attention -> Dense(64) -> Dense(32) -> Output"
+  },
+  "sequence_length": 24,
+  "prediction_horizon": 4,
+  "n_features": 69,
+  "best_threshold": 0.39999999999999997,
+  "metrics": {
+    "accuracy": 0.3104,
+    "precision": 0.2991869918699187,
+    "recall": 1.0,
+    "f1_score": 0.46057571964956195,
+    "auc_roc": 0.5102903480232672,
+    "auc_pr": 0.2947035352542906
+  },
+  "confusion_matrix": {
+    "true_negatives": 10,
+    "false_positives": 431,
+    "false_negatives": 0,
+    "true_positives": 184
+  },
+  "total_parameters": 395905,
+  "timestamp": "2025-10-22T14:56:28.745433"
+}

@@ -11,7 +11,8 @@
       "Bash(taskkill:*)",
       "Bash(curl:*)",
       "Bash(cat:*)",
-      "Bash(python3:*)"
+      "Bash(python3:*)",
+      "Bash(dir:*)"
     ],
     "deny": [],
     "ask": []
