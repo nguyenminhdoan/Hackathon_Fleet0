@@ -501,10 +501,79 @@
         <!-- Tab: Manual Prediction -->
         <div id="manual" class="tab-content">
             <div class="grid">
+                <!-- CSV Upload Section -->
                 <div class="card" style="grid-column: span 2;">
-                    <h2>🔧 Manual Prediction Test</h2>
+                    <h2>📂 Upload Historical Data (Recommended)</h2>
+                    <p style="color: #666; margin-bottom: 15px;">
+                        <strong>Most Accurate:</strong> Upload a CSV file with 24 rows of historical data (6 hours at 15-min intervals).
+                        The model was trained on sequences of 24 timesteps and will give more accurate predictions with real historical data.
+                    </p>
+
+                    <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin-bottom: 15px;">
+                        <p style="margin: 0 0 10px 0; color: #333;"><strong>📋 CSV Requirements:</strong></p>
+                        <ul style="margin: 0; padding-left: 20px; color: #666;">
+                            <li>Exactly 24 rows (6 hours of data)</li>
+                            <li>11 required columns: Battery_Voltage, Battery_Current, Battery_Temperature, SoC, SoH, Charge_Cycles, Distance_Traveled, Power_Consumption, Component_Health_Score, Failure_Probability, RUL</li>
+                            <li>Each row represents 15 minutes of vehicle operation</li>
+                        </ul>
+                    </div>
+
+                    <div style="display: flex; gap: 10px; margin-bottom: 15px;">
+                        <button type="button" onclick="downloadTemplate()" class="btn" style="background: #48bb78;">
+                            📥 Download CSV Template
+                        </button>
+                        <label for="csv-upload" class="btn" style="background: #667eea; cursor: pointer;">
+                            📤 Upload CSV File
+                        </label>
+                        <input type="file" id="csv-upload" accept=".csv" style="display: none;" onchange="handleCSVUpload(event)">
+                    </div>
+
+                    <div id="csv-result" style="margin-top: 20px; display: none;">
+                        <h3 style="color: #667eea; margin-bottom: 15px;">CSV Prediction Result:</h3>
+                        <div id="csv-alert" class="alert"></div>
+                        <div id="csv-summary" style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin-bottom: 15px;"></div>
+                        <table>
+                            <tr>
+                                <th>Metric</th>
+                                <th>Value</th>
+                            </tr>
+                            <tr>
+                                <td>Maintenance Probability</td>
+                                <td id="csv-prob">--</td>
+                            </tr>
+                            <tr>
+                                <td>Severity Level</td>
+                                <td id="csv-severity">--</td>
+                            </tr>
+                            <tr>
+                                <td>Recommendation</td>
+                                <td id="csv-recommendation">--</td>
+                            </tr>
+                            <tr>
+                                <td>Preventive Maintenance Cost</td>
+                                <td id="csv-prev-cost">--</td>
+                            </tr>
+                            <tr>
+                                <td>Expected Cost if No Action</td>
+                                <td id="csv-no-action-cost">--</td>
+                            </tr>
+                            <tr>
+                                <td>Potential Savings</td>
+                                <td id="csv-savings">--</td>
+                            </tr>
+                            <tr>
+                                <td>Action Recommendation</td>
+                                <td id="csv-action">--</td>
+                            </tr>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="card" style="grid-column: span 2;">
+                    <h2>✍️ Quick Manual Input (Simulated Sequence)</h2>
                     <p style="color: #666; margin-bottom: 20px;">
-                        Enter vehicle parameters to test the AI model prediction manually.
+                        <strong>Alternative:</strong> Enter current vehicle parameters only. The system will simulate the past 6 hours of data.
+                        <em style="color: #f56565;">Note: This is less accurate than uploading real historical data.</em>
                     </p>
 
                     <form id="manual-form">
@@ -1155,6 +1224,108 @@
                 alert('Error making prediction: ' + error.message);
             }
         });
+
+        // CSV Upload Handler
+        async function handleCSVUpload(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const formData = new FormData();
+            formData.append('file', file);
+
+            try {
+                const res = await fetch(`${API_BASE}/api/predict/csv`, {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const result = await res.json();
+
+                if (!res.ok) {
+                    alert(`Error: ${result.error}\n${result.detail || ''}`);
+                    return;
+                }
+
+                const pred = result.prediction;
+                const summary = result.data_summary;
+
+                // Show result
+                document.getElementById('csv-result').style.display = 'block';
+
+                // Show data summary
+                document.getElementById('csv-summary').innerHTML = `
+                    <h4 style="margin: 0 0 10px 0; color: #667eea;">📊 Uploaded Data Summary</h4>
+                    <p style="margin: 5px 0;"><strong>Rows Processed:</strong> ${summary.rows_processed} (${summary.time_span})</p>
+                    <p style="margin: 5px 0;"><strong>Voltage Change:</strong> ${summary.trends.voltage_change.toFixed(2)}V
+                        (${summary.first_timestep.battery_voltage.toFixed(1)}V → ${summary.last_timestep.battery_voltage.toFixed(1)}V)</p>
+                    <p style="margin: 5px 0;"><strong>SoC Change:</strong> ${(summary.trends.soc_change * 100).toFixed(1)}%
+                        (${(summary.first_timestep.soc * 100).toFixed(1)}% → ${(summary.last_timestep.soc * 100).toFixed(1)}%)</p>
+                    <p style="margin: 5px 0;"><strong>Health Change:</strong> ${(summary.trends.health_change * 100).toFixed(2)}%
+                        (${(summary.first_timestep.component_health * 100).toFixed(1)}% → ${(summary.last_timestep.component_health * 100).toFixed(1)}%)</p>
+                `;
+
+                // Update alert
+                const alertDiv = document.getElementById('csv-alert');
+                if (pred.severity === 'CRITICAL') {
+                    alertDiv.className = 'alert alert-danger';
+                } else if (pred.severity === 'WARNING') {
+                    alertDiv.className = 'alert alert-warning';
+                } else {
+                    alertDiv.className = 'alert alert-success';
+                }
+                alertDiv.textContent = pred.recommendation;
+
+                // Update values
+                document.getElementById('csv-prob').textContent =
+                    `${(pred.probability * 100).toFixed(2)}%`;
+                document.getElementById('csv-severity').textContent =
+                    pred.severity;
+                document.getElementById('csv-recommendation').textContent =
+                    pred.recommendation;
+
+                // Update cost analysis
+                if (pred.cost_analysis) {
+                    const cost = pred.cost_analysis;
+                    document.getElementById('csv-prev-cost').textContent =
+                        `$${cost.preventive_maintenance_cost.toFixed(0)}`;
+                    document.getElementById('csv-no-action-cost').textContent =
+                        `$${cost.expected_cost_if_no_action.toFixed(0)}`;
+
+                    const savings = cost.potential_savings;
+                    const savingsText = savings > 0 ?
+                        `$${savings.toFixed(0)} (SAVE)` :
+                        savings < 0 ?
+                        `$${Math.abs(savings).toFixed(0)} (LOSS)` :
+                        '$0 (NEUTRAL)';
+                    const savingsEl = document.getElementById('csv-savings');
+                    savingsEl.textContent = savingsText;
+                    savingsEl.style.color = savings > 0 ? '#009900' : savings < 0 ? '#cc0000' : '#666';
+
+                    document.getElementById('csv-action').textContent =
+                        cost.action_recommendation;
+                }
+
+                // Scroll to result
+                document.getElementById('csv-result').scrollIntoView({
+                    behavior: 'smooth',
+                    block: 'nearest'
+                });
+
+                // Show success message
+                alert(`✅ CSV file processed successfully!\n${summary.rows_processed} rows analyzed.\nPrediction: ${(pred.probability * 100).toFixed(1)}% probability of maintenance needed.`);
+
+            } catch (error) {
+                alert('Error processing CSV: ' + error.message);
+            }
+
+            // Reset file input
+            event.target.value = '';
+        }
+
+        // Download CSV Template
+        function downloadTemplate() {
+            window.location.href = `${API_BASE}/api/download/csv-template`;
+        }
 
         // Countdown timer
         function updateCountdown() {

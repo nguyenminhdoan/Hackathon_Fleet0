@@ -8,9 +8,9 @@ Features:
 - Live simulation with real LSTM model
 """
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Form
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Form, File, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 import pandas as pd
 import numpy as np
@@ -21,6 +21,7 @@ from datetime import datetime, timedelta
 import json
 from typing import List, Optional
 import uvicorn
+import io
 
 app = FastAPI(title="EV Fleet Predictive Maintenance Dashboard",
               description="Enhanced real-time monitoring with analytics",
@@ -72,7 +73,8 @@ class EnhancedFleetSimulator:
             # Handle different preprocessor structures
             if isinstance(preprocessor_data, dict):
                 self.scaler = preprocessor_data.get('scaler')
-                self.feature_cols = preprocessor_data.get('feature_cols', [])
+                # Try both 'feature_columns' and 'feature_cols' for compatibility
+                self.feature_cols = preprocessor_data.get('feature_columns', preprocessor_data.get('feature_cols', []))
             else:
                 # Old format
                 self.scaler = preprocessor_data
@@ -99,7 +101,7 @@ class EnhancedFleetSimulator:
                 preprocessor_data = joblib.load('preprocessor.pkl')
                 if isinstance(preprocessor_data, dict):
                     self.scaler = preprocessor_data.get('scaler')
-                    self.feature_cols = preprocessor_data.get('feature_cols', [])
+                    self.feature_cols = preprocessor_data.get('feature_columns', preprocessor_data.get('feature_cols', []))
                 else:
                     self.scaler = preprocessor_data
                     self.feature_cols = []
@@ -248,35 +250,46 @@ class EnhancedFleetSimulator:
             severity = 'CRITICAL'
             recommendation = 'CRITICAL: Schedule immediate maintenance (within 4 hours)'
             confidence = 'high'
-            # If we do preventive now, cost is $500
-            # If we don't and it fails, cost is $5000 + 8 hours downtime = $7400
+            # Expected cost if no action: probability of failure × (critical repair + downtime)
+            expected_failure_cost = probability * (COST_CRITICAL + 8 * COST_DOWNTIME_HOUR)
+            # Cost if we do preventive maintenance now
             preventive_cost = COST_PREVENTIVE
-            if_no_action_cost = probability * (COST_CRITICAL + 8 * COST_DOWNTIME_HOUR)
-            potential_savings = if_no_action_cost - preventive_cost
+            # Savings = what we avoid - what we spend
+            potential_savings = expected_failure_cost - preventive_cost
+            action_recommendation = 'IMMEDIATE preventive maintenance required'
+
         elif probability > 0.4:
             severity = 'WARNING'
             recommendation = 'WARNING: Schedule maintenance within 24 hours'
             confidence = 'medium'
+            expected_failure_cost = probability * (COST_CORRECTIVE + 4 * COST_DOWNTIME_HOUR)
             preventive_cost = COST_PREVENTIVE
-            if_no_action_cost = probability * (COST_CORRECTIVE + 4 * COST_DOWNTIME_HOUR)
-            potential_savings = if_no_action_cost - preventive_cost
+            potential_savings = expected_failure_cost - preventive_cost
+            action_recommendation = 'Schedule preventive maintenance soon' if potential_savings > 0 else 'Monitor closely'
+
         elif probability > 0.2:
             severity = 'MONITOR'
             recommendation = 'MONITOR: Continue normal operations, schedule routine check'
             confidence = 'medium'
+            expected_failure_cost = probability * (COST_CORRECTIVE + 2 * COST_DOWNTIME_HOUR)
             preventive_cost = COST_PREVENTIVE
-            if_no_action_cost = probability * (COST_CORRECTIVE + 4 * COST_DOWNTIME_HOUR)
-            potential_savings = if_no_action_cost - preventive_cost
+            potential_savings = expected_failure_cost - preventive_cost
+            action_recommendation = 'Consider preventive maintenance' if potential_savings > 100 else 'Continue monitoring'
+
         else:
             severity = 'NORMAL'
             recommendation = 'NORMAL: No action required'
             confidence = 'high'
-            preventive_cost = COST_PREVENTIVE
-            if_no_action_cost = probability * COST_CORRECTIVE
-            potential_savings = if_no_action_cost - preventive_cost
+            expected_failure_cost = probability * COST_CORRECTIVE
+            preventive_cost = 0  # No maintenance needed, so no cost
+            potential_savings = 0  # No action needed
+            action_recommendation = 'No maintenance required - continue normal operations'
 
-        # Decide recommendation
-        action_recommendation = 'Perform preventive maintenance' if potential_savings > 0 else 'Continue monitoring'
+        # Calculate cost efficiency ratio (how much we save per dollar spent)
+        if preventive_cost > 0:
+            cost_benefit_ratio = expected_failure_cost / preventive_cost
+        else:
+            cost_benefit_ratio = 0
 
         return {
             'maintenance_needed': maintenance_needed,
@@ -288,8 +301,9 @@ class EnhancedFleetSimulator:
             'threshold': optimal_threshold,
             'cost_analysis': {
                 'preventive_maintenance_cost': float(preventive_cost),
-                'expected_cost_if_no_action': float(if_no_action_cost),
+                'expected_cost_if_no_action': float(expected_failure_cost),
                 'potential_savings': float(potential_savings),
+                'cost_benefit_ratio': float(cost_benefit_ratio),
                 'action_recommendation': action_recommendation
             }
         }
@@ -381,7 +395,8 @@ async def root():
             "predict": "/api/predict",
             "analytics": "/api/analytics",
             "model_info": "/api/model/info",
-            "manual_predict": "/api/predict/manual"
+            "manual_predict": "/api/predict/manual",
+            "csv_predict": "/api/predict/csv (POST with file upload - requires 24 rows)"
         }
     }
 
@@ -449,67 +464,124 @@ async def predict_manual(
     failure_probability: float = Form(0.1),
     rul: float = Form(30)
 ):
-    """Make manual prediction with user input."""
+    """Make manual prediction with user input - creates realistic sequence with gradual degradation."""
 
-    # Create manual data point with ALL required base features
-    manual_data = pd.DataFrame([{
-        'Battery_Voltage': battery_voltage,
-        'Battery_Current': battery_current,
-        'Battery_Temperature': battery_temperature,
-        'SoC': soc,
-        'SoH': soh,
-        'Charge_Cycles': charge_cycles,
-        'Distance_Traveled': distance_traveled,
-        'Power_Consumption': power_consumption,
-        'Component_Health_Score': component_health_score,
-        'Failure_Probability': failure_probability,
-        'RUL': rul,
-        # Add missing base features with defaults
-        'Motor_Temperature': 25.0,
-        'Motor_Vibration': 0.5,
-        'Motor_Torque': 50.0,
-        'Motor_RPM': 1000.0,
-        'Brake_Pad_Wear': 0.3,
-        'Brake_Pressure': 50.0,
-        'Reg_Brake_Efficiency': 0.85,
-        'Tire_Pressure': 35.0,
-        'Tire_Temperature': 25.0,
-        'Suspension_Load': 500.0,
-        'Ambient_Temperature': 20.0,
-        'Ambient_Humidity': 50.0,
-        'Load_Weight': 500.0,
-        'Driving_Speed': 50.0,
-        'Idle_Time': 0.0,
-        'Route_Roughness': 0.5,
-        'TTF': 30.0
-    }])
+    # Create a realistic sequence showing degradation over 24 timesteps
+    # This simulates how the values would change over time leading to the current state
+    sequence_rows = []
 
-    # Engineer features
-    manual_data = simulator.engineer_features(manual_data)
+    # Add small random variations based on input values to make predictions unique
+    np.random.seed(int(battery_voltage * 100 + battery_current * 10 + battery_temperature + soc * 1000 + soh * 1000) % 2**32)
 
-    # Get available features
-    available_cols = [col for col in simulator.feature_cols if col in manual_data.columns]
+    for i in range(simulator.sequence_length):
+        # Calculate progress through sequence (0.0 to 1.0)
+        progress = i / (simulator.sequence_length - 1)
 
-    if len(available_cols) == 0:
+        # Add slight random noise that varies based on the timestep
+        noise = np.random.uniform(-0.02, 0.02)
+
+        # The last few timesteps should be very close to actual input values
+        if i >= simulator.sequence_length - 3:
+            # Last 3 timesteps use actual input values with tiny variations
+            blend = (i - (simulator.sequence_length - 3)) / 2.0  # 0.0, 0.5, 1.0 for last 3
+            row = {
+                'Battery_Voltage': battery_voltage * (0.98 + 0.02 * blend + noise * 0.5),
+                'Battery_Current': battery_current * (0.98 + 0.02 * blend + noise * 0.5),
+                'Battery_Temperature': battery_temperature * (0.98 + 0.02 * blend + noise * 0.5),
+                'SoC': soc * (0.98 + 0.02 * blend + noise * 0.5),
+                'SoH': soh * (0.98 + 0.02 * blend + noise * 0.5),
+                'Charge_Cycles': int(charge_cycles * (0.95 + 0.05 * blend)),
+                'Distance_Traveled': distance_traveled * (0.95 + 0.05 * blend),
+                'Power_Consumption': power_consumption * (0.98 + 0.02 * blend + noise * 0.5),
+                'Component_Health_Score': component_health_score * (0.98 + 0.02 * blend + noise * 0.5),
+                'Failure_Probability': failure_probability * (0.95 + 0.05 * blend + noise * 0.3),
+                'RUL': rul * (0.98 + 0.02 * blend + noise * 0.5),
+            }
+        else:
+            # Earlier timesteps show progression toward current state
+            # Create realistic trends based on input values
+            health_factor = (component_health_score + soh) / 2.0  # Average health
+            stress_factor = (failure_probability + (1 - health_factor)) / 2.0  # How stressed the system is
+
+            # Better health = less variation in earlier timesteps
+            variation = 1.0 + (stress_factor * 0.3 * (1 - progress)) + noise
+
+            row = {
+                # Battery metrics trend toward input values
+                'Battery_Voltage': battery_voltage * (1.0 + (1 - progress) * 0.15 * (1 - health_factor)) * variation,
+                'Battery_Current': battery_current * (0.85 + 0.15 * progress) * (1 + noise * stress_factor),
+                'Battery_Temperature': battery_temperature * (0.90 + 0.10 * progress) * (1 + noise * stress_factor * 0.5),
+                'SoC': min(100, soc * (1.0 + (1 - progress) * 0.25 * health_factor)),
+                'SoH': min(100, soh * (1.0 + (1 - progress) * 0.15 * health_factor)),
+
+                # Cumulative values scale with progress
+                'Charge_Cycles': int(charge_cycles * (0.7 + 0.3 * progress)),
+                'Distance_Traveled': distance_traveled * (0.7 + 0.3 * progress),
+                'Power_Consumption': power_consumption * (0.85 + 0.15 * progress) * (1 + noise * 0.3),
+
+                # Health scores degrade over time
+                'Component_Health_Score': component_health_score * (1.0 + (1 - progress) * 0.2 * health_factor),
+                'Failure_Probability': max(0, failure_probability * (0.3 + 0.7 * progress)),
+                'RUL': rul * (1.0 + (1 - progress) * 0.3 * health_factor),
+            }
+
+        # Add other required features
+        row.update({
+            'Motor_Temperature': 20.0 + (battery_temperature - 20.0) * progress + noise * 3,
+            'Motor_Vibration': 0.3 + stress_factor * 0.4 * progress,
+            'Motor_Torque': 50.0 * (1 + noise * 0.1),
+            'Motor_RPM': 1000.0 * (0.9 + 0.2 * progress),
+            'Brake_Pad_Wear': min(1.0, stress_factor * 0.5 * progress),
+            'Brake_Pressure': 50.0,
+            'Reg_Brake_Efficiency': 0.90 - stress_factor * 0.1 * progress,
+            'Tire_Pressure': 35.0 * (1.0 - stress_factor * 0.05 * progress),
+            'Tire_Temperature': 20.0 + battery_temperature * 0.3 * progress,
+            'Suspension_Load': 400.0 + power_consumption * 2,
+            'Ambient_Temperature': 20.0,
+            'Ambient_Humidity': 50.0,
+            'Load_Weight': 400.0 + power_consumption * 2,
+            'Driving_Speed': 40.0 + power_consumption * 0.2 * progress,
+            'Idle_Time': max(0, 5.0 * (1 - progress) * (1 - stress_factor)),
+            'Route_Roughness': 0.3 + stress_factor * 0.4,
+            'TTF': rul * (1.0 + (1 - progress) * 0.3)
+        })
+
+        sequence_rows.append(row)
+
+    # Create DataFrame with the sequence
+    manual_sequence_df = pd.DataFrame(sequence_rows)
+
+    # Engineer features on the entire sequence
+    manual_sequence_df = simulator.engineer_features(manual_sequence_df)
+
+    # Get features in exact order from training
+    if len(simulator.feature_cols) > 0:
+        # Use the exact feature list from training, in order
+        available_cols = [col for col in simulator.feature_cols if col in manual_sequence_df.columns]
+
+        # Log any missing features
+        missing = [col for col in simulator.feature_cols if col not in manual_sequence_df.columns]
+        if missing:
+            print(f"Warning: {len(missing)} features missing from manual input: {missing[:5]}...")
+    else:
         # Fallback to base features
         available_cols = ['Battery_Voltage', 'Battery_Current', 'Battery_Temperature',
                          'SoC', 'SoH', 'Charge_Cycles', 'Distance_Traveled',
                          'Power_Consumption', 'Component_Health_Score',
                          'Failure_Probability', 'RUL']
-        available_cols = [col for col in available_cols if col in manual_data.columns]
+        available_cols = [col for col in available_cols if col in manual_sequence_df.columns]
 
-    # Create sequence by repeating the data point
-    sequence_data = manual_data[available_cols].values
-    sequence_data = np.tile(sequence_data, (simulator.sequence_length, 1))
+    # Extract sequence data in exact order
+    sequence_data = manual_sequence_df[available_cols].values
 
     # Scale
     if simulator.scaler is not None:
         try:
             sequence_data = simulator.scaler.transform(sequence_data)
-        except:
-            pass
+        except Exception as e:
+            print(f"Scaling warning: {e}")
 
-    # Reshape
+    # Reshape for LSTM: (1, sequence_length, features)
     sequence_data = sequence_data.reshape(1, simulator.sequence_length, -1)
 
     # Predict
@@ -533,9 +605,208 @@ async def predict_manual(
             "battery_temperature": battery_temperature,
             "soc": soc,
             "soh": soh,
+            "charge_cycles": charge_cycles,
+            "distance_traveled": distance_traveled,
+            "power_consumption": power_consumption,
+            "component_health_score": component_health_score,
+            "failure_probability": failure_probability,
+            "rul": rul,
         },
-        "prediction": result
+        "prediction": result,
+        "note": "Prediction based on simulated sequence showing gradual degradation to your input values"
     }
+
+
+@app.post("/api/predict/csv")
+async def predict_from_csv(file: UploadFile = File(...)):
+    """
+    Make prediction from uploaded CSV file with 24 rows of historical data.
+
+    Expected CSV format:
+    - Must have exactly 24 rows (6 hours of data at 15-min intervals)
+    - Required columns: Battery_Voltage, Battery_Current, Battery_Temperature,
+      SoC, SoH, Charge_Cycles, Distance_Traveled, Power_Consumption,
+      Component_Health_Score, Failure_Probability, RUL
+    - Optional: all other sensor columns from the training dataset
+    """
+    try:
+        # Read uploaded CSV
+        contents = await file.read()
+        csv_data = pd.read_csv(io.StringIO(contents.decode('utf-8')))
+
+        # Validate row count
+        if len(csv_data) != simulator.sequence_length:
+            return JSONResponse(
+                status_code=400,
+                content={
+                    "error": f"Invalid CSV: Expected exactly {simulator.sequence_length} rows, got {len(csv_data)} rows",
+                    "detail": f"The model requires {simulator.sequence_length} timesteps (6 hours of data at 15-min intervals)"
+                }
+            )
+
+        # Required columns
+        required_cols = [
+            'Battery_Voltage', 'Battery_Current', 'Battery_Temperature',
+            'SoC', 'SoH', 'Charge_Cycles', 'Distance_Traveled',
+            'Power_Consumption', 'Component_Health_Score',
+            'Failure_Probability', 'RUL'
+        ]
+
+        missing_cols = [col for col in required_cols if col not in csv_data.columns]
+        if missing_cols:
+            return JSONResponse(
+                status_code=400,
+                content={
+                    "error": f"Missing required columns: {', '.join(missing_cols)}",
+                    "required_columns": required_cols,
+                    "found_columns": list(csv_data.columns)
+                }
+            )
+
+        # Add missing optional columns with default values
+        optional_defaults = {
+            'Motor_Temperature': 25.0,
+            'Motor_Vibration': 0.5,
+            'Motor_Torque': 50.0,
+            'Motor_RPM': 1000.0,
+            'Brake_Pad_Wear': 0.3,
+            'Brake_Pressure': 50.0,
+            'Reg_Brake_Efficiency': 0.85,
+            'Tire_Pressure': 35.0,
+            'Tire_Temperature': 25.0,
+            'Suspension_Load': 500.0,
+            'Ambient_Temperature': 20.0,
+            'Ambient_Humidity': 50.0,
+            'Load_Weight': 500.0,
+            'Driving_Speed': 50.0,
+            'Idle_Time': 0.0,
+            'Route_Roughness': 0.5,
+            'TTF': csv_data['RUL'].mean() if 'RUL' in csv_data.columns else 30.0
+        }
+
+        for col, default_val in optional_defaults.items():
+            if col not in csv_data.columns:
+                csv_data[col] = default_val
+
+        # Engineer features
+        csv_data = simulator.engineer_features(csv_data)
+
+        # Get features in exact order from training
+        if len(simulator.feature_cols) > 0:
+            # Use the exact feature list from training
+            available_cols = []
+            for col in simulator.feature_cols:
+                if col in csv_data.columns:
+                    available_cols.append(col)
+                else:
+                    # Feature is missing - this is a problem
+                    print(f"Warning: Feature '{col}' from training not found in CSV data")
+
+            if len(available_cols) != len(simulator.feature_cols):
+                return JSONResponse(
+                    status_code=500,
+                    content={
+                        "error": f"Feature mismatch: Expected {len(simulator.feature_cols)} features, but only found {len(available_cols)}",
+                        "missing_features": [col for col in simulator.feature_cols if col not in csv_data.columns],
+                        "detail": "After feature engineering, some expected features are missing. This is likely a bug in the feature engineering code."
+                    }
+                )
+        else:
+            # Fallback to base features
+            available_cols = required_cols
+            available_cols = [col for col in available_cols if col in csv_data.columns]
+
+        # Extract sequence data in the exact order
+        sequence_data = csv_data[available_cols].values
+
+        # Validate sequence length
+        if sequence_data.shape[0] != simulator.sequence_length:
+            return JSONResponse(
+                status_code=400,
+                content={"error": f"Sequence must have exactly {simulator.sequence_length} timesteps"}
+            )
+
+        # Scale
+        if simulator.scaler is not None:
+            try:
+                sequence_data = simulator.scaler.transform(sequence_data)
+            except Exception as e:
+                print(f"Scaling warning: {e}")
+                return JSONResponse(
+                    status_code=500,
+                    content={"error": f"Failed to scale data: {str(e)}"}
+                )
+
+        # Reshape for LSTM: (1, sequence_length, features)
+        sequence_data = sequence_data.reshape(1, simulator.sequence_length, -1)
+
+        # Predict
+        if simulator.model is not None:
+            try:
+                prediction = simulator.model.predict(sequence_data, verbose=0)
+                probability = float(prediction[0][0])
+            except Exception as e:
+                print(f"CSV prediction error: {e}")
+                return JSONResponse(
+                    status_code=500,
+                    content={"error": f"Prediction failed: {str(e)}"}
+                )
+        else:
+            return JSONResponse(
+                status_code=503,
+                content={"error": "Model not loaded"}
+            )
+
+        result = simulator._format_prediction(probability, simulated=False)
+
+        # Get summary of uploaded data
+        last_row = csv_data.iloc[-1]
+        first_row = csv_data.iloc[0]
+
+        return {
+            "timestamp": str(datetime.now()),
+            "data_summary": {
+                "rows_processed": len(csv_data),
+                "time_span": "6 hours (24 timesteps at 15-min intervals)",
+                "first_timestep": {
+                    "battery_voltage": float(first_row['Battery_Voltage']),
+                    "soc": float(first_row['SoC']),
+                    "soh": float(first_row['SoH']),
+                    "component_health": float(first_row['Component_Health_Score']),
+                },
+                "last_timestep": {
+                    "battery_voltage": float(last_row['Battery_Voltage']),
+                    "soc": float(last_row['SoC']),
+                    "soh": float(last_row['SoH']),
+                    "component_health": float(last_row['Component_Health_Score']),
+                },
+                "trends": {
+                    "voltage_change": float(last_row['Battery_Voltage'] - first_row['Battery_Voltage']),
+                    "soc_change": float(last_row['SoC'] - first_row['SoC']),
+                    "health_change": float(last_row['Component_Health_Score'] - first_row['Component_Health_Score']),
+                }
+            },
+            "prediction": result,
+            "note": "Prediction based on actual 6-hour historical data from uploaded CSV"
+        }
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return JSONResponse(
+            status_code=500,
+            content={"error": f"Failed to process CSV: {str(e)}"}
+        )
+
+
+@app.get("/api/download/csv-template")
+async def download_csv_template():
+    """Download sample CSV template for manual prediction."""
+    return FileResponse(
+        path="sample_24_rows_template.csv",
+        filename="ev_prediction_template_24rows.csv",
+        media_type="text/csv"
+    )
 
 
 @app.get("/api/analytics")

@@ -12,7 +12,9 @@
       "Bash(curl:*)",
       "Bash(cat:*)",
       "Bash(python3:*)",
-      "Bash(dir:*)"
+      "Bash(dir:*)",
+      "Bash(lsof:*)",
+      "Bash(xargs kill:*)"
     ],
     "deny": [],
     "ask": []
